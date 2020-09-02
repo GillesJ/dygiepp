@@ -28,6 +28,7 @@ function(p) {
   local bert_base_dim = 768,
   local bert_large_dim = 1024,
   local scibert_dim = 768,
+  local finbert_dim = 768,
 
   local module_initializer = [
     [".*weight", {"type": "xavier_normal"}],
@@ -47,6 +48,7 @@ function(p) {
   local use_bert = (if p.use_bert_base then true
                     else if p.use_bert_large then true
                     else if p.use_scibert then true
+                    else if p.use_finbert then true
                     else false),
 
   local event_n_span_prop = getattr(p, "event_n_span_prop", 0),
@@ -68,7 +70,8 @@ function(p) {
     (if p.use_elmo then elmo_dim else 0) +
     (if p.use_bert_base then bert_base_dim else 0) +
     (if p.use_bert_large then bert_large_dim else 0) +
-    (if p.use_scibert then scibert_dim else 0)),
+    (if p.use_scibert then scibert_dim else 0) +
+    (if p.use_finbert then finbert_dim else 0)),
   // If we're using Bert, no LSTM. We just pass the token embeddings right through.
   local context_layer_output_size = (if p.finetune_bert
     then token_embedding_dim
@@ -142,8 +145,9 @@ function(p) {
       type: "bert-pretrained",
       pretrained_model: (if p.use_bert_base then "bert-base-cased"
                          else if p.use_bert_large then "bert-large-cased"
-                         else "pretrained/scibert_scivocab_cased/vocab.txt"),
-      do_lowercase: false,
+                         else if p.use_scibert then "pretrained/scibert_scivocab_cased/vocab.txt"
+                         else if p.use_finbert then "bert-base-uncased"),
+      do_lowercase: if p.use_finbert then true else false,
       use_starting_offsets: true
     }
   },
@@ -185,7 +189,8 @@ function(p) {
         type: "bert-pretrained",
         pretrained_model: (if p.use_bert_base then "bert-base-cased"
                            else if p.use_bert_large then "bert-large-cased"
-                           else "pretrained/scibert_scivocab_cased/weights.tar.gz"),
+                           else if p.use_scibert then "pretrained/scibert_scivocab_cased/weights.tar.gz"
+                           else if p.use_finbert then "pretrained/finbert/weights.tar.gz"),
         requires_grad: p.finetune_bert
       }
     }

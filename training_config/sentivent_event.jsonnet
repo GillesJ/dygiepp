@@ -1,6 +1,8 @@
 // Import template file.
 
-local template = import "template_dw.libsonnet";
+// local template = import "template_dw.libsonnet";
+
+local template = import "template_sentivent.libsonnet";
 
 ////////////////////
 
@@ -26,6 +28,7 @@ local params = {
   use_bert_large: true,
   finetune_bert: false,
   use_scibert: false,
+  use_finbert: false,
   context_width: 3,
 
   // Specifies the model parameters.
@@ -68,18 +71,18 @@ local params = {
   argument_spans_per_word: 0.8,
   events_positive_label_weight: 1.0,
   events_entity_beam: false,             // Use entity beam.
-  event_args_use_ner_labels: true,      // Use ner labels when predicting roles.
+  event_args_use_ner_labels: false,      // Use ner labels when predicting roles.
   event_args_use_trigger_labels: false,  // Use trigger labels when predicting roles.
   label_embedding_method: "one_hot",     // Label embedding method.
   event_args_label_predictor: "softmax", // Method for predicting labels at test time.
   event_args_label_emb: 10,          // Label embedding dimension.
   event_args_gold_candidates: false, // If true, use gold candidate spans.
-  n_trigger_labels: 34,        // Need # of trigger and ner labels in order to add as features.
+  n_trigger_labels: 18,        // Need # of trigger and ner labels in order to add as features.
   n_ner_labels: 8,
   events_context_window: 0,
   shared_attention_context: false,
   trigger_attention_context: false,
-  event_n_span_prop: 0,
+  event_n_span_prop: 4,
 
   // Model training
   batch_size: 15,

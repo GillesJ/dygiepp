@@ -75,7 +75,7 @@ local params = {
   event_args_label_emb: 10,          // Label embedding dimension.
   event_args_gold_candidates: false, // If true, use gold candidate spans.
   n_trigger_labels: 34,        // Need # of trigger and ner labels in order to add as features.
-  n_ner_labels: 8,
+  n_ner_labels: 10,
   events_context_window: 0,
   shared_attention_context: false,
   trigger_attention_context: false,
