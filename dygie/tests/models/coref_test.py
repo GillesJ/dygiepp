@@ -16,7 +16,7 @@ class TestCoref(ModelTestCase):
         # TODO(dwadden) create smaller model for testing.
         super(TestCoref, self).setUp()
         self.config_file = "tests/fixtures/dygie_test.jsonnet"
-        self.data_file = "tests/fixtures/scierc_article.json"
+        self.data_file = "tests/fixtures/scierc_article.json_old_with_subtype_args"
         self.set_up_model(self.config_file, self.data_file)
 
     def get_raw_data(self):

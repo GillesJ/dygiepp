@@ -16,7 +16,7 @@ class TestDyGIE(ModelTestCase):
         # TODO(dwadden) create smaller model for testing.
         super(TestDyGIE, self).setUp()
         self.config_file = "../fixtures/dygie_test.jsonnet"
-        self.data_file = "../../../../scierc_coref_multitask_bb/data/processed_data/json/train.json"
+        self.data_file = "../../../../scierc_coref_multitask_bb/data/processed_data/json_old_with_subtype_args/train.json_old_with_subtype_args"
         self.set_up_model(self.config_file, self.data_file)
         self.test_dataset()
 

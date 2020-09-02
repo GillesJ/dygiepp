@@ -96,7 +96,7 @@ echo "Resolving differences between GENIA original version and SUTD version."
 python ./scripts/data/genia/resolve_differences.py > $log_dir/04-resolve-differences.log
 
 echo "Converting to JSON form."
-python ./scripts/data/genia/convert_to_json.py > $log_dir/05-convert-to-json.log
+python ./scripts/data/genia/convert_to_json.py > $log_dir/05-convert-to-json_old_with_subtype_args.log
 
 echo "Aligning article ID's from NER and coref version."
 python ./scripts/data/genia/align_articles.py > $log_dir/06-align-articles.log

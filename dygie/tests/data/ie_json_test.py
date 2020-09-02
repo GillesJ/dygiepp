@@ -20,8 +20,8 @@ class TestIEJsonReader(AllenNlpTestCase):
         # Sentence lengths: [20, 23, 36, 14, 14, 30, 31, 15].
         # Cumulative sentence lengths: [20, 43, 79, 93, 107, 137, 168, 183].
         self.reader = IEJsonReader(max_span_width=5)
-        self.instances_scierc = self.reader.read("tests/fixtures/scierc_article.json")
-        self.instances_ace = self.reader.read("tests/fixtures/ace_event_article.json")
+        self.instances_scierc = self.reader.read("tests/fixtures/scierc_article.json_old_with_subtype_args")
+        self.instances_ace = self.reader.read("tests/fixtures/ace_event_article.json_old_with_subtype_args")
 
     def tearDown(self):
         pass

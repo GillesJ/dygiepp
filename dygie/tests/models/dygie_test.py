@@ -12,7 +12,7 @@ class TestDyGIE(ModelTestCase):
         # TODO(dwadden) create smaller model for testing.
         super(TestDyGIE, self).setUp()
         self.config_file = "tests/fixtures/dygie_test_full.jsonnet"
-        self.data_file = "tests/fixtures/scierc_article.json"
+        self.data_file = "tests/fixtures/scierc_article.json_old_with_subtype_args"
         self.set_up_model(self.config_file, self.data_file)
 
     def test_dygie_model_can_train_save_and_load(self):

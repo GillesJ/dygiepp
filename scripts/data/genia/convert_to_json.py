@@ -1,6 +1,6 @@
 """
 Format GENIA data set from
-https://gitlab.com/sutd_nlp/overlapping_mentions/tree/master/data/GENIA into the json form used by
+https://gitlab.com/sutd_nlp/overlapping_mentions/tree/master/data/GENIA into the json_old_with_subtype_args form used by
 DyGIE++.
 """
 
@@ -67,7 +67,7 @@ def sentence_to_json(sent, offset):
 
 
 def doc_to_json(sents, doc_id, fold):
-    """A list of sentences (a document) to json."""
+    """A list of sentences (a document) to json_old_with_subtype_args."""
     # Append fold info to doc_key since one doc appears in both train and dev;
     # ditto dev and test.
     res = dict(clusters=[],
@@ -98,7 +98,7 @@ def get_unique_ner_labels(jsonified):
 
 def format_fold(fold, in_dir, out_dir):
     """Take data SUTD-formatted documents and convert to our JSON format."""
-    out_name = path.join(out_dir, "{0}.json".format(fold))
+    out_name = path.join(out_dir, "{0}.json_old_with_subtype_args".format(fold))
     ner_labels = set()
     with open(out_name, "w") as f_out:
         order = pd.read_csv(path.join(in_dir, "{0}_order.csv".format(fold)), header=None, sep="\t")[0]
@@ -123,7 +123,7 @@ def format_fold(fold, in_dir, out_dir):
 def main():
     in_prefix = "./data/genia/raw-data/sutd-article"
     in_dir = f"{in_prefix}/split-corrected"
-    out_dir = "./data/genia/processed-data/json-ner"
+    out_dir = "./data/genia/processed-data/json_old_with_subtype_args-ner"
     os.makedirs(out_dir)
     folds = ["train", "dev", "test"]
     ner_labels = set()

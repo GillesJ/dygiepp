@@ -23,7 +23,7 @@ genia_base = "./data/genia"
 genia_raw = f"{genia_base}/raw-data"
 genia_processed = f"{genia_base}/processed-data"
 
-json_dir = f"{genia_processed}/json-ner"
+json_dir = f"{genia_processed}/json_old_with_subtype_args-ner"
 coref_dir = f"{genia_raw}/GENIA_MedCo_coreference_corpus_1.0"
 alignment_file = f"{genia_raw}/align/alignment.csv"
 
@@ -205,11 +205,11 @@ def get_excluded():
 
 
 def one_fold(fold, coref_types, out_dir, keep_excluded):
-    """Add coref field to json, one fold."""
+    """Add coref field to json_old_with_subtype_args, one fold."""
     print("Running fold {0}.".format(fold))
     excluded = get_excluded()
-    with open(path.join(json_dir, "{0}.json".format(fold))) as f_json:
-        with open(path.join(out_dir, "{0}.json".format(fold)), "w") as f_out:
+    with open(path.join(json_dir, "{0}.json_old_with_subtype_args".format(fold))) as f_json:
+        with open(path.join(out_dir, "{0}.json_old_with_subtype_args".format(fold)), "w") as f_out:
             for counter, line in enumerate(f_json):
                 doc = json.loads(line)
                 pmid = int(doc["doc_key"].split("_")[0])
@@ -226,7 +226,7 @@ def one_fold(fold, coref_types, out_dir, keep_excluded):
 
 
 def get_clusters(coref_types, out_dir, keep_excluded):
-    """Add coref to json, filtering to only keep coref roots and `coref_types`."""
+    """Add coref to json_old_with_subtype_args, filtering to only keep coref roots and `coref_types`."""
     global stats
     stats = dict(no_matches=0, successful_matches=0, different_num_matches=0)
     for fold in ["train", "dev", "test"]:
@@ -257,7 +257,7 @@ def main():
         ]
 
     coref_type_name = "ident-only" if args.ident_only else "all"
-    out_dir = f"{genia_processed}/json-coref-{coref_type_name}"
+    out_dir = f"{genia_processed}/json_old_with_subtype_args-coref-{coref_type_name}"
 
     if not path.exists(out_dir):
         os.mkdir(out_dir)

@@ -77,7 +77,7 @@ The `Dataset` class in `dygie/data/dataset_readers/data_structures.py` provides 
 ```python
 from dygie.data.dataset_readers.data_structures import Dataset
 
-data = Dataset("data/scierc/processed_data/json/train.json")
+data = Dataset("data/scierc/processed_data/json_old_with_subtype_args/train.json_old_with_subtype_args")
 print(data[0])  # Print the first document.
 print(data[0][1].ner)  # Print the named entities in the second sentence of the first document.
 ```

@@ -1,5 +1,5 @@
 """
-Convert ACE data to our json format.
+Convert ACE data to our json_old_with_subtype_args format.
 """
 
 import xml.etree.ElementTree as ET
@@ -739,7 +739,7 @@ def one_fold(fold, output_dir, heads_only=True, real_entities_only=True, include
         for line in f:
             doc_keys.append(line.strip())
 
-    with open(path.join(output_dir, fold + ".json"), "w") as g:
+    with open(path.join(output_dir, fold + ".json_old_with_subtype_args"), "w") as g:
         for doc_key in doc_keys:
             annotation_path = path.join(doc_path, doc_key + ".apf.xml")
             text_path = path.join(doc_path, doc_key + ".sgm")
@@ -760,7 +760,7 @@ def main():
                         help="Include pronouns as entities and include them as event arguments.")
     args = parser.parse_args()
 
-    output_dir = f"./data/ace-event/processed-data/{args.output_name}/json"
+    output_dir = f"./data/ace-event/processed-data/{args.output_name}/json_old_with_subtype_args"
     os.makedirs(output_dir, exist_ok=True)
 
     for fold in ["train", "dev", "test"]:

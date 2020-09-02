@@ -150,8 +150,8 @@ def main():
     trigger_vocab_dirs = [path.join(ensemble_dir, "vocabulary_trig_{0}".format(k)) for k in [0, 1, 2 ,3]]
     arg_dir = path.join(ensemble_dir, "scores_arg")
     arg_vocab_dir = path.join(ensemble_dir, "vocabulary_arg")
-    test_file = "/data/dwadden/proj/dygie/dygie-experiments/datasets/ace-event-tongtao-settings/json/test.json"
-    output_file = path.join(ensemble_dir, "predictions.json")
+    test_file = "/data/dwadden/proj/dygie/dygie-experiments/datasets/ace-event-tongtao-settings/json_old_with_subtype_args/test.json_old_with_subtype_args"
+    output_file = path.join(ensemble_dir, "predictions.json_old_with_subtype_args")
     predict_from_ensemble(trigger_dirs, trigger_vocab_dirs, arg_dir, arg_vocab_dir, test_file, output_file)
 
 

@@ -7,7 +7,7 @@ AllenNLP predictor framework, so here's a short script to do it.
 usage: predict.py [archive-file] [test-file] [output-file]
 """
 
-# TODO(dwadden) This breaks right now on relation prediction because json can't do dicts whose keys
+# TODO(dwadden) This breaks right now on relation prediction because json_old_with_subtype_args can't do dicts whose keys
 # are tuples.
 
 import json

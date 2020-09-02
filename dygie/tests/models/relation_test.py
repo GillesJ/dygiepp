@@ -17,7 +17,7 @@ class TestRelation(ModelTestCase):
     def setUp(self):
         super(TestRelation, self).setUp()
         self.config_file = "tests/fixtures/dygie_test.jsonnet"
-        self.data_file = "tests/fixtures/scierc_article.json"
+        self.data_file = "tests/fixtures/scierc_article.json_old_with_subtype_args"
         self.set_up_model(self.config_file, self.data_file)
 
     def test_decode(self):

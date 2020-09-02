@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 """
-Make predictions of trained model, output as json like input. Not easy to do this in the current
+Make predictions of trained model, output as json_old_with_subtype_args like input. Not easy to do this in the current
 AllenNLP predictor framework, so here's a short script to do it.
 
 usage: predict_dygie_whole_doc.py [archive-file] [test-file] [output-file]
@@ -10,7 +10,7 @@ This is a variant of `predict_dygie` that was used for the AI2 hackathon to make
 predictions.
 """
 
-# TODO(dwadden) This breaks right now on relation prediction because json can't do dicts whose keys
+# TODO(dwadden) This breaks right now on relation prediction because json_old_with_subtype_args can't do dicts whose keys
 # are tuples.
 
 import json

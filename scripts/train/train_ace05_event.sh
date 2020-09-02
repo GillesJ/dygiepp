@@ -2,7 +2,7 @@
 # Usage: bash scripts/train/train_ace05_event.sh [gpu-id]
 # gpu-id can be an integer GPU ID, or -1 for CPU.
 
-experiment_name="ace05-event"
+experiment_name="ace05-event-default"
 data_root="./data/ace-event/processed-data/default-settings/json"
 config_file="./training_config/ace05_event.jsonnet"
 cuda_device=$1

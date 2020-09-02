@@ -141,7 +141,7 @@ def WriteDocs(docs, outfn):
             f.write(json.dumps(relation))
             f.write('\n')
 
-out_dir="../../../../data/ace05/processed-data/json"
+out_dir="../../../../data/ace05/processed-data/json_old_with_subtype_args"
 
 docs = []
 entity_set = set()
@@ -155,7 +155,7 @@ for stanfordfn in glob.glob('./corpus/dev/' + '*.stanford.so'):
     entity_dir, rel_dir = parseAce(annfn, entity_set, rel_set)
     parses, token_dict_offset1, token_dict_offset2 = parseStanford(stanfordfn)
     nercount, relcount, sentcount = Ace2json(entity_dir, rel_dir, token_dict_offset1, token_dict_offset2, txtfn, docs, nercount, relcount, sentcount)
-outfn = f'{out_dir}/dev.json'
+outfn = f'{out_dir}/dev.json_old_with_subtype_args'
 WriteDocs(docs, outfn)
 
 docs = []
@@ -170,7 +170,7 @@ for stanfordfn in glob.glob('./corpus/test/' + '*.stanford.so'):
     entity_dir, rel_dir = parseAce(annfn, entity_set, rel_set)
     parses, token_dict_offset1, token_dict_offset2 = parseStanford(stanfordfn)
     nercount, relcount, sentcount = Ace2json(entity_dir, rel_dir, token_dict_offset1, token_dict_offset2, txtfn, docs, nercount, relcount, sentcount)
-outfn = f'{out_dir}/test.json'
+outfn = f'{out_dir}/test.json_old_with_subtype_args'
 WriteDocs(docs, outfn)
 
 docs = []
@@ -185,5 +185,5 @@ for stanfordfn in glob.glob('./corpus/train/' + '*.stanford.so'):
     entity_dir, rel_dir = parseAce(annfn, entity_set, rel_set)
     parses, token_dict_offset1, token_dict_offset2 = parseStanford(stanfordfn)
     nercount, relcount, sentcount = Ace2json(entity_dir, rel_dir, token_dict_offset1, token_dict_offset2, txtfn, docs, nercount, relcount, sentcount)
-outfn = f'{out_dir}/train.json'
+outfn = f'{out_dir}/train.json_old_with_subtype_args'
 WriteDocs(docs, outfn)

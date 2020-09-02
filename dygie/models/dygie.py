@@ -321,6 +321,7 @@ class DyGIE(Model):
         #     decoded_events = self._events.decode(output_dict["events"])
         #     self._joint_metrics(decoded_ner, decoded_events)
 
+
         return output_dict
 
     def update_span_embeddings(self, span_embeddings, span_mask, top_span_embeddings, top_span_mask, top_span_indices):

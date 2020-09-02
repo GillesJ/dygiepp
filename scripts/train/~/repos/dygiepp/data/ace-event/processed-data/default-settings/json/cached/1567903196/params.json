@@ -1,0 +1,1 @@
+{"context_width": 3, "debug": false, "max_span_width": 12, "token_indexers": {"bert": {"do_lowercase": false, "pretrained_model": "bert-large-cased", "type": "bert-pretrained", "use_starting_offsets": true}}, "type": "ie_json"}
