@@ -2,9 +2,8 @@
 
 Implements the model described in the paper [Entity, Relation, and Event Extraction with Contextualized Span Representations](https://www.semanticscholar.org/paper/Entity%2C-Relation%2C-and-Event-Extraction-with-Span-Wadden-Wennberg/fac2368c2ec81ef82fd168d49a0def2f8d1ec7d8).
 
-This repository is under construction and we're in the process of adding support for more datasets.
-
 ## Table of Contents
+- [Project status](#project-status)
 - [Dependencies](#dependencies)
 - [Model training](#training-a-model)
 - [Model evaluation](#evaluating-a-model)
@@ -14,17 +13,49 @@ This repository is under construction and we're in the process of adding support
 - [Contact](#contact)
 
 
+## Project status
+
+This branch used to be named `allennlp-v1`, and it has been made the new `master`. It's compatible with new version of AllenNLP, and the model configuration process has been simplified. I'd recommend using this branch for all future work. If for some reason you need the older version of the code, it's on the branch [emnlp-2019](https://github.com/dwadden/dygiepp/tree/emnlp-2019).
+
+Unfortunately, I don't have the bandwidth at this point to add additional features. But please create a new issue if you have problems with:
+- Reproducing the results reported in the README.
+- Making predictions on a new dataset using pre-trained models.
+- Training your own model on a new dataset.
+
+There are a number of ways this code could be improved, and I'd definitely welcome pull requests. If you're interested, see [contributions.md](doc/contributions.md) for a list of ieas.
+
+### Submit a model!
+
+If you have a DyGIE model that you've trained on a new dataset, feel free to upload it [here](https://docs.google.com/forms/d/e/1FAIpQLSdwws7zVAqF15-kBqkKBupymWe0ASkXhODH8yomYkRDy5DvCw/viewform?usp=sf_link) and I'll add it to the collection of pre-trained models.
+
+
 ## Dependencies
 
-This code was developed using Python 3.7. To create a new Conda environment using Python 3.7, do `conda create --name dygiepp python=3.7`.
+Clone this repository and navigate the the root of the repo on your system. Then execute:
 
-The necessary dependencies can be installed with `pip install -r requirements.txt`.
+```
+conda create --name dygiepp python=3.7
+pip install -r requirements.txt
+conda develop .   # Adds DyGIE to your PYTHONPATH
+```
 
-The only dependencies for the modeling code are [AllenNLP](https://allennlp.org/) 0.9.0 and [PyTorch](https://pytorch.org/) 1.2.0. It may run with newer versions, but this is not guarenteed. For PyTorch GPU support, follow the instructions on the [PyTorch](https://pytorch.org/).
+This library relies on [AllenNLP](https://allennlp.org) and uses AllenNLP shell [commands](https://docs.allennlp.org/master/#package-overview) to kick off training, evaluation, and testing.
 
-For data preprocessing a few additional data and string processing libraries are required including, [Pandas](https://pandas.pydata.org) [Beautiful Soup 4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/), and [scispacy](scispacy).
+If you run into an issue installing `jsonnet`, [this issue](https://github.com/allenai/allennlp/issues/2779) may prove helpful.
 
-Finally, you'll need SciBERT for the scientific datasets. Run `python scripts/pretrained/get_scibert.py` to download and extract the SciBERT model to `./pretrained`.
+### Docker build
+A `Dockerfile` is provided with the Pytorch + CUDA + CUDNN base image for a full-stack GPU install.
+It will create conda environments `dygiepp` for modeling & `ace-event-preprocess` for ACE05-Event preprocessing.
+
+By default the build downloads datasets and dependencies for all tasks.
+This takes a long time and produces a large image, so you will want to comment out unneeded datasets/tasks in the Dockerfile.
+
+- Comment out unneeded task sections in `Dockerfile`.
+- Build container: `docker build --tag dygiepp:dev <dygiepp-repo-dirpath>`
+- Run the container interactively, mount this project dir to /dygiepp/: `docker run --gpus all -it --ipc=host -v <dygiepp-repo-dirpath>:/dygiepp/ --name dygiepp dygiep:dev`
+
+**NOTE**: This Dockerfile was added in a PR from a contributor. I haven't tested it, so it's not "officially supported". More PR's are welcome, though.
+
 
 ### Docker build
 A `Dockerfile` is provided with the Pytorch + CUDA + CUDNN base image for a full-stack install.
@@ -39,15 +70,28 @@ This takes a long time, so you will want to comment out unneeded tasks in the Do
 
 ## Training a model
 
-Warning about coreference resolution: The coreference code will break on sentences with only a single token. If you have these in your dataset, either get rid of them or deactivate the coreference resolution part of the model.
+*Warning about coreference resolution*: The coreference code will break on sentences with only a single token. If you have these in your dataset, either get rid of them or deactivate the coreference resolution part of the model.
+
+We rely on [Allennlp train](https://docs.allennlp.org/master/api/commands/train/) to handle model training. The `train` command takes a configuration file as an argument, and initializes a model based on the configuration, and serializes the traing model. More details on the configuration process for DyGIE can be found in [doc/config.md](doc/config.md).
+
+To train a model, enter `bash scripts/train.sh [config_name]` at the command line, where the `config_name` is the name of a file in the `training_config` directory. For instance, to train a model using the `scierc.jsonnet` config, you'd enter
+
+```bash
+bash scripts/train.sh scierc
+```
+
+The resulting model will go in `models/scierc`. For more information on how to modify training configs (e.g. to change the GPU used for training), see [config.md](doc/config.md).
+
+Information on preparing specific training datasets is below. For more information on how to create training batches that utilize GPU resources efficiently, see [model.md](doc/model.md)
+
 
 ### SciERC
 
 To train a model for named entity recognition, relation extraction, and coreference resolution on the SciERC dataset:
 
 - **Download the data**. From the top-level folder for this repo, enter `bash ./scripts/data/get_scierc.sh`. This will download the scierc dataset into a folder `./data/scierc`
-- **Train the model**. Enter `bash ./scripts/train/train_scierc.sh [gpu-id]`. The `gpu-id` should be an integer like `1`, or `-1` to train on CPU. The program will train a model and save a model at `./models/scierc`.
-- To train a "lightweight" version of the model that doesn't do coreference propagation and uses a context width of 1, do `bash ./scripts/train/train_scierc_lightweight.sh [gpu-id]` instead. The result will go in `./models/scierc-lightweight`. More info on why you'd want to do this in the section on [making predictions](#making-predictions).
+- **Train the model**. Enter `bash scripts/train.sh scierc`.
+- To train a "lightweight" version of the model that doesn't do coreference propagation and uses a context width of 1, do `bash scripts/train.sh scierc_lightweight` instead. More info on why you'd want to do this in the section on [making predictions](#making-predictions).
 
 
 ### GENIA
@@ -55,24 +99,48 @@ To train a model for named entity recognition, relation extraction, and corefere
 The steps are similar to SciERC.
 
 - **Download the data**. From the top-level folder for this repo, enter `bash ./scripts/data/get_genia.sh`.
-- **Train the model**. Enter `bash ./scripts/train/train_genia.sh [gpu-id]`. The program will train a model and save a model at `./models/genia`.
+- **Train the model**. Enter `bash scripts/train genia`.
 - As with SciERC, we also offer a "lightweight" version with a context width of 1 and no coreference propagation.
 
 
 ### ChemProt
 
-The [ChemProt](https://biocreative.bioinformatics.udel.edu/news/corpora/chemprot-corpus-biocreative-vi/) corpus contains entity and relation annotations for drug / protein interaction. Follow these steps:
+The [ChemProt](https://biocreative.bioinformatics.udel.edu/news/corpora/chemprot-corpus-biocreative-vi/) corpus contains entity and relation annotations for drug / protein interaction. The ChemProt preprocessing requires a separate environment:
 
-- **Get the data**. Run `bash ./scripts/data/get_chemprot.sh`. This will download the data and process it into the DyGIE input format.
-  - NOTE: This is a quick-and-dirty script that skips entities whose character offsets don't align exactly with the tokenization produced by SciSpacy. We lose about 10% of the named entities and 20% of the relations in the dataset as a result.
-- **Train the model**. Enter `bash ./scripts/train/train_chemprot.sh [gpu-id]`. The model will be saved in `./models/chemprot`.
+```shell
+conda deactivate
+conda create --name chemprot-preprocess python=3.7
+conda activate chemprot-preprocess
+pip install -r scripts/data/chemprot/requirements.txt
+```
+
+Then, follow these steps:
+
+- **Get the data**.
+  - Run `bash ./scripts/data/get_chemprot.sh`. This will download the data and process it into the DyGIE input format.
+    - NOTE: This is a quick-and-dirty script that skips entities whose character offsets don't align exactly with the tokenization produced by SciSpacy. We lose about 10% of the named entities and 20% of the relations in the dataset as a result.
+  - Switch back to your DyGIE environment.
+  - Collate the data:
+    ```
+    mkdir -p data/chemprot/collated_data
+
+    python scripts/data/shared/collate.py \
+      data/chemprot/processed_data \
+      data/chemprot/collated_data \
+      --train_name=training \
+      --dev_name=development
+   - For a quick spot-check to see how much of the data was lost, you can run:
+    ```
+    python scripts/data/chemprot/03_spot_check.py
+    ```   ```
+- **Train the model**. Enter `bash scripts/train chemprot`.
 
 
 ### ACE05 (ACE for entities and relations)
 
 #### Creating the dataset
 
-For more information on ACE relation and event preprocessing, see [DATA.md](DATA.md) and [this issue](https://github.com/dwadden/dygiepp/issues/11).
+For more information on ACE relation and event preprocessing, see [doc/data.md](doc/data.md) and [this issue](https://github.com/dwadden/dygiepp/issues/11).
 
 We use preprocessing code adapted from the [DyGIE repo](https://github.com/luanyi/DyGIE), which is in turn adapted from the [LSTM-ER repo](https://github.com/tticoin/LSTM-ER). The following software is required:
 - Java, to run CoreNLP.
@@ -88,11 +156,11 @@ Then, run the driver script to preprocess the data:
 bash scripts/data/get_ace05.sh [path-to-ACE-data]
 ```
 
-The results will go in `./data/ace05/processed-data`. The intermediate files will go in `./data/ace05/raw-data`.
+The results will go in `./data/ace05/collated-data`. The intermediate files will go in `./data/ace05/raw-data`.
 
 #### Training a model
 
-Enter `bash ./scripts/train/train_ace05_relation.sh [gpu-id]`. A model trained this way will not reproduce the numbers in the paper. We're in the process of debugging and will update.
+Enter `bash scripts/train ace05_relation`. A model trained this way will not reproduce the numbers in the paper. We're in the process of debugging and will update.
 
 ### ACE05 Event
 
@@ -116,26 +184,44 @@ Now, run the script
 ```
 python ./scripts/data/ace-event/parse_ace_event.py [output-name] [optional-flags]
 ```
-You can see the available flags by calling `parse_ace_event.py -h`. For detailed descriptions, see [DATA.md](DATA.md). The results will go in `./data/ace-event/processed-data/[output-name]`. We require an output name because you may want to preprocess the ACE data multiple times using different flags. For default preprocessing settings, you could do:
+You can see the available flags by calling `parse_ace_event.py -h`. For detailed descriptions, see [data.md](doc/data.md). The results will go in `./data/ace-event/processed-data/[output-name]`. We require an output name because you may want to preprocess the ACE data multiple times using different flags. For default preprocessing settings, you could do:
 ```
 python ./scripts/data/ace-event/parse_ace_event.py default-settings
 ```
-When finished, you should `conda deactivate` the `ace-event-preprocess` environment and re-activate your modeling environment.
+Now `conda deactivate` the `ace-event-preprocess` environment and re-activate your modeling environment.
+
+Finally, collate the version of the dataset you just created. For instance, continuing the example above,
+```
+mkdir -p data/ace-event/collated-data/default-settings/json
+
+python scripts/data/shared/collate.py \
+  data/ace-event/processed-data/default-settings/json \
+  data/ace-event/collated-data/default-settings/json \
+  --file_extension json
+```
 
 #### Training the model
 
-Enter `bash ./scripts/train/train_ace05_event.sh [gpu-id]`. The result will go in `models/ace05-event`.  A model trained in this fashion will reproduce (within 0.1 F1 or so) the results in Table 4 of the paper. To reproduce the results in Table 1 requires training an ensemble model of 4 trigger detectors. The basic process is as follows:
+To train on the data preprocessed with default settings, enter `bash scripts/train.sh ace05_event`. A model trained in this fashion will reproduce (within 0.1 F1 or so) the results in Table 4 of the paper. To train on a different version, modify `training_config/ace05_event.jsonnet` to point to the appropriate files.
+
+To reproduce the results in Table 1 requires training an ensemble model of 4 trigger detectors. The basic process is as follows:
 
 - Merge the ACE event train + dev data, then create 4 new train / dev splits.
-- Train a separate trigger detection model on each split. To do this, modify `training-config/ace05_event.jsonnet` by setting
+- Train a separate trigger detection model on each split. To do this, modify `training_config/ace05_event.jsonnet` by setting
   ```jsonnet
-  loss_weights_events: {   // Loss weights for trigger and argument ID in events.
-    trigger: 1.0,
-    arguments: 0.5
-  },
+  model +: {
+    modules +: {
+      events +: {
+        loss_weights: {
+          trigger: 1.0,
+          arguments: 0.5
+        }
+      }
+    }
+  }
   ```
 - Make trigger predictions using a majority vote of the 4 ensemble models.
-- Use these predicted triggers when making event argument predictions based on the event argument scores output by the model saved at `models/ace05-event`.
+- Use these predicted triggers when making event argument predictions based on the event argument scores output by the model saved at `models/ace05_event`.
 
 If you need more details, email me.
 
@@ -162,7 +248,7 @@ For example, to evaluate the [pretrained SciERC model](#pretrained-models), you 
 ```shell
 allennlp evaluate \
   pretrained/scierc.tar.gz \
-  data/scierc/processed_data/json/test.json \
+  data/scierc/normalized_data/json/test.json \
   --cuda-device 2 \
   --include-package dygie
 ```
@@ -170,7 +256,7 @@ To evaluate a model you trained on the SciERC data, you could do
 ```shell
 allennlp evaluate \
   models/scierc/model.tar.gz \
-  data/scierc/processed_data/json/test.json \
+  data/scierc/normalized_data/json/test.json \
   --cuda-device 2  \
   --include-package dygie \
   --output-file models/scierc/metrics_test.json
@@ -178,77 +264,86 @@ allennlp evaluate \
 
 ## Pretrained models
 
-We have versions of DyGIE++ trained on SciERC and GENIA available. There are two versions:
-- The "lightweight" versions don't use coreference propagation, and use a context window of 1. If you've got a new dataset and you just want to get some reasonable predictions, use these.
-- The "full" versions use coreference propagatation and a context window of 3. Use these if you need to squeeze out another F1 point or two. These models take longer to run, and they may break if they're given inputs that are too long.
+A number of models are available for download. They are named for the dataset they are trained on. "Lightweight" models are models trained on datasets for which coreference resolution annotations were available, but we didn't use them. This is "lightweight" because coreference resolution is expensive, since it requires predicting cross-sentence relationships between spans.
 
-### Downloads
+If you want to use one of these pretrained models to make predictions on a new dataset, you need to set the `dataset` field for the instances in your new dataset to match the name of the `dataset` the model was trained on. For example, to make predictions using the pretrained SciERC model, set the `dataset` field in your new instances to `scierc`. For more information on the `dataset` field, see [data.md](doc/data.md).
 
-Run `./scripts/pretrained/get_dygiepp_pretrained.sh` to download all the available pretrained models to the `pretrained` directory. If you only want one model, here are the download links.
+To download all available models, run `scripts/pretrained/get_dygiepp_pretrained.sh`. Or, click on the links below to download only a single model.
 
-- [SciERC](https://s3-us-west-2.amazonaws.com/ai2-s2-research/dygiepp/scierc.tar.gz)
-- [SciERC lightweight](https://s3-us-west-2.amazonaws.com/ai2-s2-research/dygiepp/scierc-lightweight.tar.gz)
-- [GENIA](https://s3-us-west-2.amazonaws.com/ai2-s2-research/dygiepp/genia.tar.gz)
-- [GENIA lightweight](https://ai2-s2-research.s3-us-west-2.amazonaws.com/dygiepp/genia-lightweight.tar.gz)
-- [ChemProt (lightweight only)](https://ai2-s2-research.s3-us-west-2.amazonaws.com/dygiepp/chemprot.tar.gz)
-- [ACE05 event (uses BERT large)](https://ai2-s2-research.s3-us-west-2.amazonaws.com/dygiepp/ace05-event.tar.gz)
+### Available models
 
-#### Performance of downloaded models
+Below are links to the available models, followed by the name of the `dataset` the model was trained on.
+
+- [SciERC](https://s3-us-west-2.amazonaws.com/ai2-s2-research/dygiepp/master/scierc.tar.gz): `scierc`
+- [SciERC lightweight](https://s3-us-west-2.amazonaws.com/ai2-s2-research/dygiepp/master/scierc-lightweight.tar.gz): `scierc`
+- [GENIA](https://s3-us-west-2.amazonaws.com/ai2-s2-research/dygiepp/master/genia.tar.gz): `genia`
+- [GENIA lightweight](https://ai2-s2-research.s3-us-west-2.amazonaws.com/dygiepp/master/genia-lightweight.tar.gz): `genia`
+- [ChemProt (lightweight only)](https://ai2-s2-research.s3-us-west-2.amazonaws.com/dygiepp/master/chemprot.tar.gz): `chemprot`
+- [ACE05 relation](https://ai2-s2-research.s3-us-west-2.amazonaws.com/dygiepp/master/ace05-relation.tar.gz): `ace05`
+- [ACE05 event](https://ai2-s2-research.s3-us-west-2.amazonaws.com/dygiepp/master/ace05-event.tar.gz): `ace-event`
+
+### Performance of pretrained models
 
 - SciERC
   ```
-  2019-11-20 16:03:12,692 - INFO - allennlp.commands.evaluate - Finished evaluating.
-  2019-11-20 16:03:12,693 - INFO - allennlp.commands.evaluate - _ner_f1: 0.6855290303565666
-  2019-11-20 16:03:12,693 - INFO - allennlp.commands.evaluate - rel_f1: 0.4867781975175391
+  "_scierc__ner_f1": 0.6846741045214326,
+  "_scierc__relation_f1": 0.46236559139784944
   ```
 
 - SciERC lightweight
   ```
-  2020-03-31 21:23:34,708 - INFO - allennlp.commands.evaluate - Finished evaluating.
-  2020-03-31 21:23:34,709 - INFO - allennlp.commands.evaluate - _ner_f1: 0.6778959810874204
-  2020-03-31 21:23:34,709 - INFO - allennlp.commands.evaluate - rel_f1: 0.4638157894736842
+  "_scierc__ner_f1": 0.6717245404143566,
+  "_scierc__relation_f1": 0.4670588235294118
   ```
 
 - GENIA
   ```
-  2019-11-21 14:45:44,505 - INFO - allennlp.commands.evaluate - ner_f1: 0.7818707451272466
+  "_genia__ner_f1": 0.7713070807912737
   ```
 
 - GENIA lightweight
   And the lightweight version:
   ```
-  2020-05-08 11:18:59,761 - INFO - allennlp.commands.evaluate - ner_f1: 0.7671077504725398
+  "_genia__ner_f1": 0.7690401296349251
   ```
 
 - ChemProt
   ```
-  2020-05-08 23:20:59,648 - INFO - allennlp.commands.evaluate - _ner_f1: 0.8850947021684925
-  2020-05-08 23:20:59,648 - INFO - allennlp.commands.evaluate - rel_f1: 0.35027598896044154
+  "_chemprot__ner_f1": 0.9059113300492612,
+  "_chemprot__relation_f1": 0.5404867256637169
   ```
   Note that we're doing span-level evaluation using predicted entities. We're also evaluating on all ChemProt relation classes, while the official task only evaluates on a subset (see [Liu et al.](https://www.semanticscholar.org/paper/Attention-based-Neural-Networks-for-Chemical-Liu-Shen/a6261b278d1c2155e8eab7ac12d924fc2207bd04) for details). Thus, our relation extraction performance is lower than, for instance, [Verga et al.](https://www.semanticscholar.org/paper/Simultaneously-Self-Attending-to-All-Mentions-for-Verga-Strubell/48f786f66eb846012ceee822598a335d0388f034), where they use gold entities as inputs for relation prediction.
 
+- ACE05-Relation
+  ```
+  "_ace05__ner_f1": 0.8634611855386309,
+  "_ace05__relation_f1": 0.6484907497565725,
+  ```
+
 - ACE05-Event
   ```
-  2020-05-25 17:05:14,044 - INFO - allennlp.commands.evaluate - _ner_f1: 0.906369532679145
-  2020-05-25 17:05:14,044 - INFO - allennlp.commands.evaluate - _trig_id_f1: 0.735042735042735
-  2020-05-25 17:05:14,044 - INFO - allennlp.commands.evaluate - trig_class_f1: 0.7029914529914529
-  2020-05-25 17:05:14,044 - INFO - allennlp.commands.evaluate - _arg_id_f1: 0.5414364640883979
-  2020-05-25 17:05:14,044 - INFO - allennlp.commands.evaluate - arg_class_f1: 0.5130228887134964
+  "_ace-event__ner_f1": 0.8927209418006965,
+  "_ace-event_trig_class_f1": 0.6998813760379595,
+  "_ace-event_arg_class_f1": 0.5,
+  "_ace-event__relation_f1": 0.5514950166112956
   ```
 
 ## Making predictions on existing datasets
 
 To make a prediction, you can use `allennlp predict`. For example, to make a prediction with the pretrained scierc model, you can do:
 
-```
+```bash
 allennlp predict pretrained/scierc.tar.gz \
-    data/scierc/processed_data/json/test.json \
+    data/scierc/normalized_data/json/test.json \
     --predictor dygie \
     --include-package dygie \
     --use-dataset-reader \
     --output-file predictions/scierc-test.jsonl \
-    --cuda-device 0
+    --cuda-device 0 \
+    --silent
 ```
+
+The predictions include the predict labels, as well as logits and softmax scores. For more information see, [docs/data.md](docs/data.md).
 
 **Caveat**: Models trained to predict coreference clusters need to make predictions on a whole document at once. This can cause memory issues. To get around this there are two options:
 
@@ -267,14 +362,15 @@ In particular, we do *not* require the types of the entity mention arguments to 
 
 ## Working with new datasets
 
-Follow the instructions as described in [Formatting a new dataset](DATA.md#formatting-a-new-dataset).
+Follow the instructions as described in [Formatting a new dataset](doc/data.md#formatting-a-new-dataset).
 
-### Making predicitons on a new dataset
+### Making predictions on a new dataset
 
 To make predictions on a new, unlabeled dataset:
 
 1. Download the [pretrained model](#pretrained-models) that most closely matches your text domain.
-2. Make predictions the same way as with the [existing datasets](#making-predictions-on-existing-datasets):
+2. Make sure that the `dataset` field for your new dataset matches the label namespaces for the pretrained model. See [here](doc/model.md#multi-dataset-training) for more on label namespaces. To view the available label namespaces for a pretrained model, use [print_label_namespaces.py](scripts/debug/print_label_namespaces.py).
+3. Make predictions the same way as with the [existing datasets](#making-predictions-on-existing-datasets):
 ```
 allennlp predict pretrained/[name-of-pretrained-model].tar.gz \
     [input-path] \
@@ -284,6 +380,15 @@ allennlp predict pretrained/[name-of-pretrained-model].tar.gz \
     --output-file [output-path] \
     --cuda-device [cuda-device]
 ```
+
+A couple tricks to make things run smoothly:
+
+1. If you're predicting on a big dataset, you probably want to load it lazily rather than loading the whole thing in before predicting. To accomplish this, add the following flag to the above command:
+  ```
+  --overrides "{'dataset_reader' +: {'lazy': true}}"
+  ```
+2. If the model runs out of GPU memory on a given prediction, it will warn you and continue with the next example rather than stopping entirely. This is less annoying than the alternative. Examples for which predictions failed will still be written to the specified `jsonl` output, but they will have an additional field `{"_FAILED_PREDICTION": true}` indicating that the model ran out of memory on this example.
+3. The `dataset` field in the dataset to be predicted must match one of the `dataset`s on which the model was trained; otherwise, the model won't know which labels to apply to the predicted data.
 
 ### Training a model on a new (labeled) dataset
 
