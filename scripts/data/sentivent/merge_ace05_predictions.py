@@ -11,8 +11,10 @@ from pathlib import Path
 
 if __name__ == "__main__":
 
-    parsed_fp = "/home/gilles/repos/dygiepp/data/sentivent/json/all.jsonl"
-    pred_fp = "/home/gilles/repos/dygiepp/predictions/sentivent-all.jsonl"
+    parsed_fp = "/home/gilles/repos/dygiepp-dev/data/sentivent/json_role_map/all.jsonl"
+    pred_fp = "/home/gilles/repos/dygiepp-dev/predictions/sentivent-all.jsonl"
+    opt_dir = Path("/home/gilles/repos/dygiepp-dev/data/sentivent/preprocessed-rolemap-insamesentence/")
+    opt_dir.mkdir(exist_ok=True)
 
     splits = {"train": (0, 228), "dev": (228, 258), "test": (258, 288)}
 
@@ -29,7 +31,6 @@ if __name__ == "__main__":
         merge["ner"] = pred["predicted_ner"]
         merges.append(merge)
 
-    opt_dir = Path("/home/gilles/repos/dygiepp/data/sentivent/ner/")
     with open(opt_dir / "all.jsonl", "wt") as all_out:
         for d in merges:
             all_out.write(json.dumps(d) + "\n")

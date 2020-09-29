@@ -9,6 +9,7 @@ from dygie.data.dataset_readers.data_structures import Dataset
 import spacy
 from collections import Counter
 from pathlib import Path
+import json
 
 def count_events(dset):
     counts = {"sentences": 0,
@@ -28,20 +29,24 @@ def count_events(dset):
     return counts
 
 
-base_fp = Path("/home/gilles/repos/dygiepp-dev/data/sentivent/ner_with_subtype_args/")
+# base_fp = Path("/home/gilles/repos/dygiepp-dev/data/sentivent/ner_with_subtype_args/")
+base_fp = Path("/home/gilles/repos/dygiepp-dev/data/sentivent/preprocessed-rolemap-insamesentence")
 train = Dataset(base_fp / "train.jsonl")
 dev = Dataset(base_fp / "dev.jsonl")
 test = Dataset(base_fp / "test.jsonl")
 data_sentivent = train.documents + dev.documents + test.documents
+train_c = count_events(train)
+dev_c = count_events(dev)
+test_c = count_events(test)
+
+# with open("/home/gilles/repos/dygiepp-dev/scripts/data/sentivent/role-map.json", "rt") as jsonin:
+#     role_map = json.load(jsonin)
+# role_map = {vv: k for k,v in role_map.items() for vv in v} # unroll onetarget-to-many json map into one-one dict
 
 # base_fp_ace = Path("/home/gilles/repos/dygiepp-dev/data/ace-event/collated-data/default-settings/json")
 # train_ace = Dataset(base_fp_ace / "train.json")
 # dev_ace = Dataset(base_fp_ace / "dev.json")
 # test_ace = Dataset(base_fp_ace / "test.json")
-#
-# train_c = count_events(train)
-# dev_c = count_events(dev)
-# test_c = count_events(test)
 # train_ace_c = count_events(train_ace)
 # dev_ace_c = count_events(dev_ace)
 # test_ace_c = count_events(test_ace)
@@ -60,8 +65,15 @@ for doc in data:
         events.update(sen.events)
         for ev in sen.events:
             roles = [arg.role for arg in ev.arguments]
-            if 'Buyer' in roles:
-                print(ev)
+            # roles = [role_map[arg.role] if arg.role in role_map else arg.role for arg in ev.arguments]
+            # if 'Rating' in roles:
+            #     print("Rating", ev)
+            # if 'Buyer' in roles:
+            #     print("Buyer", ev)
+            # if "Amount" in roles:
+            #     print("Amount", ev)
+            # if "DecreaseAmount" in roles or "IncreaseAmount" in roles:
+            #     print("Amount2", ev)
             all_argument_roles.update(roles)
             all_event_arg.setdefault(ev.trigger.label, Counter()).update(roles)
             for role in roles:
