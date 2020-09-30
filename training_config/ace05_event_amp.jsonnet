@@ -3,7 +3,7 @@ local template = import "template.libsonnet";
 template.DyGIE {
   bert_model: "roberta-base",
   distributed: {
-    cuda_devices: [3],
+    cuda_devices: [2,3],
   },
   data_paths: {
     train: "data/ace-event/collated-data/default-settings/json/train.json",
@@ -18,6 +18,6 @@ template.DyGIE {
   },
   target_task: "events",
   trainer: {
-    use_amp: false,
+    use_amp: true,
   },
 }
