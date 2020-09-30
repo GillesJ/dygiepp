@@ -6,13 +6,13 @@ template.DyGIE {
     cuda_devices: [2,3],
   },
   data_paths: {
-    train: "data/ace-event/collated-data/default-settings/json/train.json",
-    validation: "data/ace-event/collated-data/default-settings/json/dev.json",
-    test: "data/ace-event/collated-data/default-settings/json/test.json",
+    train: "data/sentivent/preproc-collated/train.jsonl",
+    validation: "data/sentivent/preproc-collated/dev.jsonl",
+    test: "data/sentivent/preproc-collated/test.jsonl",
   },
   loss_weights: {
     ner: 0.5,
-    relation: 0.5,
+    relation: 1.0,
     coref: 0.0,
     events: 1.0
   },
