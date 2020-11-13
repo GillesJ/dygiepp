@@ -12,6 +12,8 @@ Implements the model described in the paper [Entity, Relation, and Event Extract
 - [Working with new datasets](#working-with-new-datasets)
 - [Contact](#contact)
 
+See the `doc` folder for documentation with more details on the [data](doc/data.md), [model implementation and debugging](doc/model.md), and [model configuration](doc/config.md).
+
 
 ## Project status
 
@@ -82,8 +84,8 @@ bash scripts/train.sh scierc
 
 The resulting model will go in `models/scierc`. For more information on how to modify training configs (e.g. to change the GPU used for training), see [config.md](doc/config.md).
 
-Information on preparing specific training datasets is below. For more information on how to create training batches that utilize GPU resources efficiently, see [model.md](doc/model.md)
-
+Information on preparing specific training datasets is below. For more information on how to create training batches that utilize GPU resources efficiently, see [model.md](doc/model.md).
+Hyperparameter optimization search is implemented using [Optuna](https://optuna.readthedocs.io), see [model.md](doc/model.md).
 
 ### SciERC
 
