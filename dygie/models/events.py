@@ -1,6 +1,7 @@
 import logging
 import itertools
 from typing import Any, Dict, List, Optional, Callable
+import functools
 
 import torch
 from torch.nn import functional as F
@@ -30,8 +31,8 @@ class EventExtractor(Model):
     def __init__(self,
                  vocab: Vocabulary,
                  make_feedforward: Callable,
-                 token_emb_dim: int,   # Triggers are represented via token embeddings.
-                 span_emb_dim: int,    # Arguments are represented via span embeddings.
+                 trigger_emb_dim: int,  # Triggers are represented via span embeddings (but can have different width than arg spans).
+                 span_emb_dim: int,  # Arguments are represented via span embeddings.
                  feature_size: int,
                  trigger_spans_per_word: float,
                  argument_spans_per_word: float,
@@ -59,16 +60,16 @@ class EventExtractor(Model):
         self._trigger_pruners = torch.nn.ModuleDict()
         for trigger_namespace in self._trigger_namespaces:
             # The trigger pruner.
-            trigger_candidate_feedforward = make_feedforward(input_dim=token_emb_dim)
+            trigger_candidate_feedforward = make_feedforward(input_dim=trigger_emb_dim)
             self._trigger_pruners[trigger_namespace] = make_pruner(trigger_candidate_feedforward)
             # The trigger scorer.
-            trigger_feedforward = make_feedforward(input_dim=token_emb_dim)
+            trigger_scorer_feedforward = make_feedforward(input_dim=trigger_emb_dim)
             self._trigger_scorers[namespace] = torch.nn.Sequential(
-                TimeDistributed(trigger_feedforward),
-                TimeDistributed(torch.nn.Linear(trigger_feedforward.get_output_dim(),
+                TimeDistributed(trigger_scorer_feedforward),
+                TimeDistributed(torch.nn.Linear(trigger_scorer_feedforward.get_output_dim(),
                                                 self._n_trigger_labels[trigger_namespace] - 1)))
 
-        # Creater argument scorers and pruners.
+        # Create argument scorers and pruners.
         self._mention_pruners = torch.nn.ModuleDict()
         self._argument_feedforwards = torch.nn.ModuleDict()
         self._argument_scorers = torch.nn.ModuleDict()
@@ -80,7 +81,8 @@ class EventExtractor(Model):
             # whether the trigger is before or inside the arg span.
 
             # TODO(dwadden) Here
-            argument_feedforward_dim = token_emb_dim + span_emb_dim + feature_size + 2
+            # argument_feedforward_dim = trigger_emb_dim + span_emb_dim + feature_size + 2
+            argument_feedforward_dim = trigger_emb_dim + span_emb_dim + feature_size + 2
             argument_feedforward = make_feedforward(input_dim=argument_feedforward_dim)
             self._argument_feedforwards[argument_namespace] = argument_feedforward
             self._argument_scorers[argument_namespace] = torch.nn.Linear(
@@ -114,6 +116,7 @@ class EventExtractor(Model):
 
     @overrides
     def forward(self,  # type: ignore
+                trigger_spans,
                 trigger_mask,
                 trigger_embeddings,
                 spans,
@@ -148,6 +151,9 @@ class EventExtractor(Model):
         (top_trig_embeddings, top_trig_mask,
          top_trig_indices, top_trig_scores, num_trigs_kept) = trigger_pruner(
              trigger_embeddings, trigger_mask, num_trigs_to_keep, trigger_scores)
+
+        top_trig_spans = util.batched_index_select(trigger_spans,
+                                                  top_trig_indices)
         top_trig_mask = top_trig_mask.unsqueeze(-1)
 
         # Compute the number of argument spans to keep.
@@ -171,17 +177,19 @@ class EventExtractor(Model):
 
         # Compute trigger / argument pair embeddings.
         trig_arg_embeddings = self._compute_trig_arg_embeddings(
-            top_trig_embeddings, top_arg_embeddings, top_trig_indices, top_arg_spans)
+            top_trig_embeddings, top_arg_embeddings, top_trig_spans, top_arg_spans)
         argument_scores = self._compute_argument_scores(
             trig_arg_embeddings, top_trig_scores, top_arg_scores, top_arg_mask)
 
         # Assemble inputs to do prediction.
-        output_dict = {"top_trigger_indices": top_trig_indices,
+        output_dict = {"top_trigger_spans": top_trig_spans,
                        "top_argument_spans": top_arg_spans,
                        "trigger_scores": trigger_scores,
                        "argument_scores": argument_scores,
                        "num_triggers_kept": num_trigs_kept,
                        "num_argument_spans_kept": num_arg_spans_kept,
+                       "trigger_mask": trigger_mask,
+                       "trigger_spans": trigger_spans,
                        "sentence_lengths": sentence_lengths}
 
         prediction_dicts, predictions = self.predict(output_dict, metadata)
@@ -219,7 +227,7 @@ class EventExtractor(Model):
     def _compute_trig_arg_embeddings(self,
                                      top_trig_embeddings,
                                      top_arg_embeddings,
-                                     top_trig_indices,
+                                     top_trig_spans,
                                      top_arg_spans):
         """
         Create trigger / argument pair embeddings, consisting of:
@@ -236,29 +244,56 @@ class EventExtractor(Model):
         arg_emb_expanded = top_arg_embeddings.unsqueeze(1)
         arg_emb_tiled = arg_emb_expanded.repeat(1, num_trigs, 1, 1)
 
-        distance_embeddings = self._compute_distance_embeddings(top_trig_indices, top_arg_spans)
+        distance_embeddings = self._compute_distance_embeddings(top_trig_spans, top_arg_spans)
+        # similarity_embeddings = trig_emb_expanded * arg_emb_expanded
 
+        # pair_embeddings_list = [trig_emb_tiled, arg_emb_tiled, distance_embeddings]
         pair_embeddings_list = [trig_emb_tiled, arg_emb_tiled, distance_embeddings]
         pair_embeddings = torch.cat(pair_embeddings_list, dim=3)
 
         return pair_embeddings
 
-    def _compute_distance_embeddings(self, top_trig_indices, top_arg_spans):
-        top_trig_ixs = top_trig_indices.unsqueeze(2)
-        arg_span_starts = top_arg_spans[:, :, 0].unsqueeze(1)
-        arg_span_ends = top_arg_spans[:, :, 1].unsqueeze(1)
-        dist_from_start = top_trig_ixs - arg_span_starts
-        dist_from_end = top_trig_ixs - arg_span_ends
-        # Distance from trigger to arg.
-        dist = torch.min(dist_from_start.abs(), dist_from_end.abs())
-        # When the trigger is inside the arg span, also set the distance to zero.
-        trigger_inside = (top_trig_ixs >= arg_span_starts) & (top_trig_ixs <= arg_span_ends)
-        dist[trigger_inside] = 0
+
+    def _compute_distance_embeddings(self, top_trig_spans, top_arg_spans):
+        """
+        Compute integer distance and positional features of two tensors of span interval indices
+        of different size. Embeds the bucketed distance values.
+        :param top_trigger_spans: Size (batch_size, num_trig_spans, 2), 2 for (trigger_start_index, trigger_end_index)
+        :param top_arg_spans: Size (batch_size, num_arg_spans, 2), 2 for (arg_start_index, arg_end_index)
+        return res: Tensor of size (batch_size, num_args consists of concat of:
+                - dist: size (batch_size, num_trig_spans, num_arg_spans) containing the integer distance values.
+                - trigger_before_feature: size idem size, boolean feature indicating that trigger comes before argument.
+                - trigger_overlap_feature: size idem, boolean feature indicating that trigger overlaps with argument.
+        """
+        # tile the span matrices
+        num_trigs = top_trig_spans.size(1)
+        num_spans = top_arg_spans.size(1)
+        trig_span_tiled = top_trig_spans.unsqueeze(2).repeat(1, 1, num_spans, 1)
+        arg_span_tiled = top_arg_spans.unsqueeze(1).repeat(1, num_trigs, 1, 1)
+
+        # get start_idc and end_idc
+        trig_span_starts = trig_span_tiled[:, :, :, 0]
+        trig_span_ends = trig_span_tiled[:, :, :, 1]
+        arg_span_starts = arg_span_tiled[:, :, :, 0]
+        arg_span_ends = arg_span_tiled[:, :, :, 1]
+
+        # compute all distances, abs().min is the correct dist value
+        dist_start2end = trig_span_starts - arg_span_ends
+        dist_end2start = trig_span_ends - arg_span_starts
+        dist = torch.min(dist_start2end.abs(), dist_end2start.abs())
+        # When the trigger overlaps with the arg span, also set the distance to zero.
+        # Overlap happens when the trigger is not outside before or after the span.
+        trigger_before = (trig_span_starts <= trig_span_ends) & (trig_span_ends < arg_span_starts)
+        trigger_after = (arg_span_starts <= arg_span_ends) & (arg_span_ends < trig_span_starts)
+        trigger_overlap = ~(trigger_before | trigger_after)
+        dist[trigger_overlap] = 0
+
+        # compute bucketed embeddings and add before, overlap boolean feature
         dist_buckets = util.bucket_values(dist, self._num_distance_buckets)
         dist_emb = self._distance_embedding(dist_buckets)
-        trigger_before_feature = (top_trig_ixs < arg_span_starts).float().unsqueeze(-1)
-        trigger_inside_feature = trigger_inside.float().unsqueeze(-1)
-        res = torch.cat([dist_emb, trigger_before_feature, trigger_inside_feature], dim=-1)
+        trigger_before_feature = trigger_before.float().unsqueeze(-1)
+        trigger_overlap_feature = trigger_overlap.float().unsqueeze(-1)
+        res = torch.cat([dist_emb, trigger_before_feature, trigger_overlap_feature], dim=-1)
 
         return res
 
@@ -320,6 +355,7 @@ class EventExtractor(Model):
         pair of span indices for that sentence, and each value is the relation label on that span
         pair.
         """
+        # debatch output to sentence
         outputs = fields_to_batches({k: v.detach().cpu() for k, v in output_dict.items()})
 
         prediction_dicts = []
@@ -337,19 +373,23 @@ class EventExtractor(Model):
 
     def _decode_trigger(self, output):
         trigger_scores = output["trigger_scores"]
+        trigger_mask = output["trigger_mask"]
+        trigger_spans = output["trigger_spans"]
+
         predicted_scores_raw, predicted_triggers = trigger_scores.max(dim=1)
         softmax_scores = F.softmax(trigger_scores, dim=1)
         predicted_scores_softmax, _ = softmax_scores.max(dim=1)
         trigger_dict = {}
         # TODO(dwadden) Can speed this up with array ops.
-        for i in range(output["sentence_lengths"]):
-            trig_label = predicted_triggers[i].item()
-            if trig_label > 0:
-                predicted_label = self.vocab.get_token_from_index(
-                    trig_label, namespace=self._active_namespaces["trigger"])
-                trigger_dict[i] = (predicted_label,
-                                   predicted_scores_raw[i].item(),
-                                   predicted_scores_softmax[i].item())
+        ix = (predicted_triggers > 0) & trigger_mask.bool()
+        zip_pred = zip(predicted_triggers[ix], predicted_scores_raw[ix],
+               predicted_scores_softmax[ix], trigger_spans[ix])
+        for pred_trigger, trigger_score_raw, trigger_score_softmax, trigger_span in zip_pred:
+            predicted_label = self.vocab.get_token_from_index(
+                    pred_trigger.item(), namespace=self._active_namespaces["trigger"])
+            trigger_dict[tuple(trigger_span.tolist())] = (predicted_label,
+                                   trigger_score_raw.item(),
+                                   trigger_score_softmax.item())
 
         return trigger_dict
 
@@ -365,25 +405,25 @@ class EventExtractor(Model):
 
         for i, j in itertools.product(range(output["num_triggers_kept"]),
                                       range(output["num_argument_spans_kept"])):
-            trig_ix = output["top_trigger_indices"][i].item()
+            trig_span = tuple(output["top_trigger_spans"][i].tolist())
             arg_span = tuple(output["top_argument_spans"][j].tolist())
             arg_label = predicted_arguments[i, j].item()
             # Only include the argument if its putative trigger is predicted as a real trigger.
-            if arg_label >= 0 and trig_ix in decoded_trig:
+            if arg_label >= 0 and trig_span in decoded_trig:
                 arg_score_raw = predicted_scores_raw[i, j].item()
                 arg_score_softmax = predicted_scores_softmax[i, j].item()
                 label_name = self.vocab.get_token_from_index(
                     arg_label, namespace=self._active_namespaces["argument"])
-                argument_dict[(trig_ix, arg_span)] = (label_name, arg_score_raw, arg_score_softmax)
+                argument_dict[(trig_span, arg_span)] = (label_name, arg_score_raw, arg_score_softmax)
 
         return argument_dict
 
     def _assemble_predictions(self, trigger_dict, argument_dict, sentence):
         events_json = []
-        for trigger_ix, trigger_label in trigger_dict.items():
+        for trigger_span, trigger_label in trigger_dict.items():
             this_event = []
-            this_event.append([trigger_ix] + list(trigger_label))
-            event_arguments = {k: v for k, v in argument_dict.items() if k[0] == trigger_ix}
+            this_event.append(list(trigger_span) + list(trigger_label))
+            event_arguments = {k: v for k, v in argument_dict.items() if k[0] == trigger_span}
             this_event_args = []
             for k, v in event_arguments.items():
                 entry = list(k[1]) + list(v)

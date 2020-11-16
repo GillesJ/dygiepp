@@ -404,6 +404,7 @@ class Span:
 
     @property
     def text(self):
+        print(self.end_sent)
         return self.sentence.text[self.start_sent:self.end_sent + 1]
 
     def __repr__(self):
@@ -438,23 +439,32 @@ class Token:
 
 class Trigger:
     def __init__(self, trig, sentence, sentence_offsets):
-        token = Token(trig[0], sentence, sentence_offsets)
-        label = trig[1]
-        self.token = token
+        # token = Token(trig[0], sentence, sentence_offsets)
+        label = trig[2]
+        span = Span(trig[0], trig[1], sentence, sentence_offsets)
+        # self.token = token
         self.label = label
+        self.span = span
 
     def __repr__(self):
-        return self.token.__repr__()[:-1] + ", " + self.label + ")"
+        return f"{self.span.__repr__()}: {self.label}"
+
+    def __hash__(self):
+        return self.span.__hash__() + hash(self.label)
+
+    def __eq__(self, other):
+        return (self.span == other.span and
+                self.label == other.label)
 
     def to_json(self):
-        return [self.token.ix_doc, self.label]
+        return list(self.span.span_doc) + [self.label]
 
 
 class PredictedTrigger(Trigger):
     def __init__(self, trig, sentence, sentence_offsets):
         super().__init__(trig, sentence, sentence_offsets)
-        self.raw_score = trig[2]
-        self.softmax_score = trig[3]
+        self.raw_score = trig[3]
+        self.softmax_score = trig[4]
 
     def __repr__(self):
         return super().__repr__() + f" with confidence {self.softmax_score:0.4f}"
@@ -612,7 +622,7 @@ class EventsBase(ABC):
         trigger_dict = {}
         argument_dict = {}
         for event in self.event_list:
-            trigger_key = event.trigger.token.ix_sent  # integer index
+            trigger_key = event.trigger.span.span_sent  # integer index
             trigger_val = event.trigger.label          # trigger label
             trigger_dict[trigger_key] = trigger_val
             for argument in event.arguments:
