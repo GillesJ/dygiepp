@@ -9,8 +9,8 @@ from overrides import overrides
 from allennlp.data import Vocabulary
 from allennlp.common.params import Params
 from allennlp.models.model import Model
-from allennlp.modules import TextFieldEmbedder, FeedForward, TimeDistributed
-from allennlp.modules.span_extractors import EndpointSpanExtractor
+from allennlp.modules import TextFieldEmbedder, FeedForward, TimeDistributed, Seq2SeqEncoder
+from allennlp.modules.span_extractors import EndpointSpanExtractor, SelfAttentiveSpanExtractor
 from allennlp.nn import util, InitializerApplicator, RegularizerApplicator
 
 # Import submodules.
@@ -58,6 +58,7 @@ class DyGIE(Model):
     def __init__(self,
                  vocab: Vocabulary,
                  embedder: TextFieldEmbedder,
+                 context_layer: Seq2SeqEncoder,
                  modules,  # TODO(dwadden) Add type.
                  feature_size: int,
                  max_span_width: int,
@@ -65,6 +66,8 @@ class DyGIE(Model):
                  target_task: str,
                  feedforward_params: Dict[str, Union[int, float]],
                  loss_weights: Dict[str, float],
+                 lexical_dropout: float = 0.2,
+                 use_attentive_span_extractor: bool = False,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  module_initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None,
@@ -75,13 +78,13 @@ class DyGIE(Model):
 
         # Create span extractor.
         self._endpoint_span_extractor = EndpointSpanExtractor(
-            embedder.get_output_dim(),
+            context_layer.get_output_dim(),
             combination="x,y",
             num_width_embeddings=max_span_width,
             span_width_embedding_dim=feature_size,
             bucket_widths=False)
         self._endpoint_trigger_span_extractor = EndpointSpanExtractor(
-            embedder.get_output_dim(),
+            context_layer.get_output_dim(),
             combination="x,y",
             num_width_embeddings=max_trigger_span_width,
             span_width_embedding_dim=feature_size,
@@ -89,15 +92,31 @@ class DyGIE(Model):
         )
 
         ####################
+        if lexical_dropout > 0:
+            self._lexical_dropout = torch.nn.Dropout(p=lexical_dropout)
+        else:
+            self._lexical_dropout = lambda x: x
+
+        if use_attentive_span_extractor:
+            self._attentive_span_extractor = SelfAttentiveSpanExtractor(
+                input_dim=context_layer.get_output_dim())
+        else:
+            self._attentive_span_extractor = None
 
         # Set parameters.
         self._embedder = embedder
+        self._context_layer = context_layer
         self._loss_weights = loss_weights
         self._max_span_width = max_span_width
         self._max_trigger_span_width = max_trigger_span_width
         self._display_metrics = self._get_display_metrics(target_task)
+
         trigger_emb_dim = self._endpoint_trigger_span_extractor.get_output_dim()
         span_emb_dim = self._endpoint_span_extractor.get_output_dim()
+
+        if self._attentive_span_extractor is not None:
+            span_emb_dim += self._attentive_span_extractor.get_output_dim()
+            trigger_emb_dim += self._attentive_span_extractor.get_output_dim()
 
         ####################
 
@@ -135,6 +154,7 @@ class DyGIE(Model):
 
         self._events = EventExtractor.from_params(vocab=vocab,
                                                   make_feedforward=make_feedforward,
+                                                  text_emb_dim=self._embedder.get_output_dim(),
                                                   trigger_emb_dim=trigger_emb_dim,
                                                   span_emb_dim=span_emb_dim,
                                                   feature_size=feature_size,
@@ -213,11 +233,17 @@ class DyGIE(Model):
         text_embeddings = self._embedder(text, num_wrapping_dims=1)
         # (n_sents, max_n_wordpieces, embedding_dim)
         text_embeddings = self._debatch(text_embeddings)
+        # apply lexical dropout
+        text_embeddings = self._lexical_dropout(text_embeddings)
 
         # (n_sents, max_sentence_length)
         text_mask = self._debatch(util.get_text_field_mask(text, num_wrapping_dims=1).float())
         sentence_lengths = text_mask.sum(dim=1).long()  # (n_sents)
 
+        # contextualize text embeddings
+        text_embeddings = self._context_layer(text_embeddings, text_mask)
+
+        # Create spans, i.e. span_embeddings, masks and span_indices
         span_mask = (spans[:, :, 0] >= 0).float()  # (n_sents, max_n_spans)
         # SpanFields return -1 when they are used as padding. As we do some comparisons based on
         # span widths when we attend over the span representations that we generate from these
@@ -232,6 +258,15 @@ class DyGIE(Model):
         trigger_mask = (trigger_spans[:, :, 0] >= 0).float()
         trigger_spans = F.relu(trigger_spans.float()).long()
         trigger_embeddings = self._endpoint_trigger_span_extractor(text_embeddings, trigger_spans)
+
+        # Make attented spans embeddings
+        if self._attentive_span_extractor is not None:
+            # Shape: (batch_size, num_spans, embedding_size)
+            attended_span_embeddings = self._attentive_span_extractor(text_embeddings, spans)
+            attended_trigger_span_embeddings = self._attentive_span_extractor(text_embeddings, trigger_spans)
+            # Shape: (batch_size, num_spans, embedding_size + 2 * encoding_dim + feature_size)
+            span_embeddings = torch.cat([span_embeddings, attended_span_embeddings], -1)
+            trigger_embeddings = torch.cat([trigger_embeddings, attended_trigger_span_embeddings], -1)
 
         # Make calls out to the modules to get results.
         output_coref = {'loss': 0}
@@ -263,10 +298,10 @@ class DyGIE(Model):
                 spans, span_mask, span_embeddings, sentence_lengths, relation_labels, metadata)
 
         if self._loss_weights['events'] > 0:
-            # The `text_embeddings` serve as representations for event triggers.
             output_events = self._events(
                 trigger_spans, trigger_mask, trigger_embeddings,
                 spans, span_mask, span_embeddings,
+                text_mask, text_embeddings,
                 sentence_lengths, trigger_labels, argument_labels,
                 ner_labels, metadata)
 

@@ -29,6 +29,7 @@
     // If using a different BERT, this number may be different. It's up to the user to set the
     // appropriate value.
     max_wordpieces_per_sentence :: 512,
+    embedder_size :: 512,
     max_span_width :: 8,
     max_trigger_span_width :: 1,
     cuda_device :: -1,
@@ -63,7 +64,7 @@
           bert: {
             type: 'pretrained_transformer_mismatched',
             model_name: dygie.bert_model,
-            max_length: dygie.max_wordpieces_per_sentence
+            max_length: dygie.max_wordpieces_per_sentence,
           },
         },
       },
@@ -78,7 +79,17 @@
             ['.*weight_matrix', { type: 'xavier_normal' }],
           ],
       },
+      context_layer: {
+        type: "lstm",
+        bidirectional: true,
+        input_size: dygie.embedder_size,
+        hidden_size: 256,
+        num_layers: 2,
+        dropout: 0.4,
+      },
       loss_weights: dygie.loss_weights,
+      use_attentive_span_extractor: true,
+      lexical_dropout: 0.2,
       feature_size: 20,
       max_span_width: dygie.max_span_width,
       max_trigger_span_width: dygie.max_trigger_span_width,
@@ -99,6 +110,7 @@
           spans_per_word: 0.5,
         },
         events: {
+          context_window: 3, // context window around trigger / argument pair embeddings
           trigger_spans_per_word: 0.3,
           argument_spans_per_word: 0.8,
           loss_weights: {
@@ -114,6 +126,7 @@
       }
     },
     trainer: {
+      patience: 5,
       checkpointer: {
         num_serialized_models_to_keep: 3,
       },

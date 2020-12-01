@@ -31,12 +31,14 @@ class EventExtractor(Model):
     def __init__(self,
                  vocab: Vocabulary,
                  make_feedforward: Callable,
+                 text_emb_dim: int,
                  trigger_emb_dim: int,  # Triggers are represented via span embeddings (but can have different width than arg spans).
                  span_emb_dim: int,  # Arguments are represented via span embeddings.
                  feature_size: int,
                  trigger_spans_per_word: float,
                  argument_spans_per_word: float,
                  loss_weights: Dict[str, float],
+                 context_window: int = 0,
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
         super(EventExtractor, self).__init__(vocab, regularizer)
 
@@ -49,6 +51,11 @@ class EventExtractor(Model):
                                   for name in self._trigger_namespaces}
         self._n_argument_labels = {name: vocab.get_vocab_size(name)
                                    for name in self._argument_namespaces}
+
+        # Context window
+        self._context_window = context_window  # If greater than 0, concatenate context as features.
+        context_window_dim = 4 * self._context_window * text_emb_dim
+        # 2 (arg context + trig context) * 2 (left context + right context) * context_window + text_emb_size
 
         # Make sure the null trigger label is always 0.
         for namespace in self._trigger_namespaces:
@@ -80,9 +87,9 @@ class EventExtractor(Model):
             # The argument scorer. The `+ 2` is there because I include indicator features for
             # whether the trigger is before or inside the arg span.
 
-            # TODO(dwadden) Here
-            # argument_feedforward_dim = trigger_emb_dim + span_emb_dim + feature_size + 2
-            argument_feedforward_dim = trigger_emb_dim + span_emb_dim + feature_size + 2
+            # set argument feedforward
+            argument_feedforward_dim = trigger_emb_dim + span_emb_dim + feature_size + 2 + context_window_dim
+            # feature size + 2 = bucket distance embedding + 2 position features
             argument_feedforward = make_feedforward(input_dim=argument_feedforward_dim)
             self._argument_feedforwards[argument_namespace] = argument_feedforward
             self._argument_scorers[argument_namespace] = torch.nn.Linear(
@@ -116,16 +123,18 @@ class EventExtractor(Model):
 
     @overrides
     def forward(self,  # type: ignore
-                trigger_spans,
-                trigger_mask,
-                trigger_embeddings,
-                spans,
-                span_mask,
-                span_embeddings,  # TODO(dwadden) add type.
-                sentence_lengths,
-                trigger_labels,
-                argument_labels,
-                ner_labels,
+                trigger_spans: torch.IntTensor,
+                trigger_mask: torch.IntTensor,
+                trigger_embeddings: torch.Tensor,
+                spans: torch.IntTensor,
+                span_mask: torch.IntTensor,
+                span_embeddings: torch.Tensor,  # TODO: make sure types are init correctly
+                text_mask: torch.IntTensor,
+                text_embeddings: torch.Tensor,
+                sentence_lengths: torch.IntTensor,
+                trigger_labels: torch.IntTensor,
+                argument_labels: torch.IntTensor,
+                ner_labels: torch.IntTensor,
                 metadata: List[Dict[str, Any]] = None) -> Dict[str, torch.Tensor]:
         """
         The trigger embeddings are just the contextualized token embeddings, and the trigger mask is
@@ -177,7 +186,7 @@ class EventExtractor(Model):
 
         # Compute trigger / argument pair embeddings.
         trig_arg_embeddings = self._compute_trig_arg_embeddings(
-            top_trig_embeddings, top_arg_embeddings, top_trig_spans, top_arg_spans)
+            top_trig_embeddings, top_arg_embeddings, top_trig_spans, top_arg_spans, text_mask, text_embeddings)
         argument_scores = self._compute_argument_scores(
             trig_arg_embeddings, top_trig_scores, top_arg_scores, top_arg_mask)
 
@@ -228,13 +237,30 @@ class EventExtractor(Model):
                                      top_trig_embeddings,
                                      top_arg_embeddings,
                                      top_trig_spans,
-                                     top_arg_spans):
+                                     top_arg_spans,
+                                     text_mask,
+                                     text_emb,
+                                     ):
         """
         Create trigger / argument pair embeddings, consisting of:
         - The embeddings of the trigger and argument pair.
         - Optionally, the embeddings of the trigger and argument labels.
         - Optionally, embeddings of the words surrounding the trigger and argument.
         """
+        trig_emb_extras = []
+        arg_emb_extras = []
+
+        if self._context_window > 0:
+            # Include words in a window around trigger and argument.
+            trigger_context = self._get_context(
+                top_trig_spans[:, :, 0], top_trig_spans[:, :, 1], text_emb)
+            argument_context = self._get_context(
+                top_arg_spans[:, :, 0], top_arg_spans[:, :, 1], text_emb)
+            trig_emb_extras.append(trigger_context)
+            arg_emb_extras.append(argument_context)
+
+
+        # Tile trigs and args so they can be combined
         num_trigs = top_trig_embeddings.size(1)
         num_args = top_arg_embeddings.size(1)
 
@@ -244,12 +270,24 @@ class EventExtractor(Model):
         arg_emb_expanded = top_arg_embeddings.unsqueeze(1)
         arg_emb_tiled = arg_emb_expanded.repeat(1, num_trigs, 1, 1)
 
+        # Compute distance embeddings
         distance_embeddings = self._compute_distance_embeddings(top_trig_spans, top_arg_spans)
         # similarity_embeddings = trig_emb_expanded * arg_emb_expanded
 
+        # Integrate all embeddings by concat
         # pair_embeddings_list = [trig_emb_tiled, arg_emb_tiled, distance_embeddings]
         pair_embeddings_list = [trig_emb_tiled, arg_emb_tiled, distance_embeddings]
         pair_embeddings = torch.cat(pair_embeddings_list, dim=3)
+
+        if trig_emb_extras:
+            trig_extras_expanded = torch.cat(trig_emb_extras, dim=-1).unsqueeze(2)
+            trig_extras_tiled = trig_extras_expanded.repeat(1, 1, num_args, 1)
+            pair_embeddings = torch.cat([pair_embeddings, trig_extras_tiled], dim=3)
+
+        if arg_emb_extras:
+            arg_extras_expanded = torch.cat(arg_emb_extras, dim=-1).unsqueeze(1)
+            arg_extras_tiled = arg_extras_expanded.repeat(1, num_trigs, 1, 1)
+            pair_embeddings = torch.cat([pair_embeddings, arg_extras_tiled], dim=3)
 
         return pair_embeddings
 
@@ -504,3 +542,37 @@ class EventExtractor(Model):
             res.update(res_avg)
 
         return res
+
+
+    def _get_context(self, span_starts, span_ends, text_emb):
+        """
+        Given span start and end (inclusive), get the context on either side.
+        """
+        # The text_emb are already zero-padded on the right, which is correct.
+        assert span_starts.size() == span_ends.size()
+        batch_size, seq_length, emb_size = text_emb.size()
+        num_candidates = span_starts.size(1)
+        padding = torch.zeros(batch_size, self._context_window, emb_size, device=text_emb.device)
+        # [batch_size, seq_length + 2 x context_window, emb_size]
+        padded_emb = torch.cat([padding, text_emb, padding], dim=1)
+
+        pad_batch = []
+        for batch_ix, (start_ixs, end_ixs) in enumerate(zip(span_starts, span_ends)):
+            pad_entry = []
+            for start_ix, end_ix in zip(start_ixs, end_ixs):
+                # The starts are inclusive, ends are exclusive.
+                left_start = start_ix
+                left_end = start_ix + self._context_window
+                right_start = end_ix + self._context_window + 1
+                right_end = end_ix + 2 * self._context_window + 1
+                left_pad = padded_emb[batch_ix, left_start:left_end]
+                right_pad = padded_emb[batch_ix, right_start:right_end]
+                pad = torch.cat([left_pad, right_pad], dim=0).view(-1).unsqueeze(0)
+                pad_entry.append(pad)
+
+            pad_entry = torch.cat(pad_entry, dim=0).unsqueeze(0)
+            pad_batch.append(pad_entry)
+
+        pad_batch = torch.cat(pad_batch, dim=0)
+
+        return pad_batch

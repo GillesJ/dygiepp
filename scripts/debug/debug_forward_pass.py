@@ -1,18 +1,18 @@
-'''
+"""
 Script for debugging the model without calling allennlp train/predict and thus avoiding costly init.
 This script will run a forward pass without all the initialization logic and without loading pretrained embeddings.
 
 Usage:
 With `dygiepp` modeling env. active, run: `python debug_forward_pass.py <training_conf_filepath>`
 See `python debug_forward_pass.py --help` for optional args.
-'''
+"""
 
 import argparse
 import json
 from _jsonnet import evaluate_file
 
 from allennlp.data import token_indexers, vocabulary
-from allennlp.modules import token_embedders, text_field_embedders
+from allennlp.modules import token_embedders, text_field_embedders, seq2seq_encoders
 from allennlp.data.dataloader import PyTorchDataLoader
 
 from dygie.data.dataset_readers.dygie import DyGIEReader
@@ -58,7 +58,10 @@ def main():
 
     # Read input data.
     reader_dict = conf_dict["dataset_reader"]
-    reader = DyGIEReader(reader_dict["max_span_width"], max_trigger_span_width=reader_dict["max_trigger_span_width"], token_indexers=tok_indexers, max_instances=args.max_instances)
+    reader = DyGIEReader(reader_dict["max_span_width"],
+                         max_trigger_span_width=reader_dict["max_trigger_span_width"],
+                         token_indexers=tok_indexers, max_instances=500)
+                         # token_indexers=tok_indexers, max_instances=args.max_instances)
     data = reader.read(conf_dict["train_data_path"])
     vocab = vocabulary.Vocabulary.from_instances(data)
     data.index_with(vocab)
@@ -73,11 +76,21 @@ def main():
             num_embeddings=vocab.get_vocab_size("tokens"), embedding_dim=100)
         embedder = text_field_embedders.BasicTextFieldEmbedder({"tokens": token_embedder})
 
+    # Create context layer: if not passthrough always use lstm when testing
+    if model_dict["context_layer"]["type"] != "pass_through":
+        del model_dict["context_layer"]["type"]
+        model_dict["context_layer"]["input_size"] = embedder.get_output_dim()
+        context_layer = seq2seq_encoders.LstmSeq2SeqEncoder(**model_dict["context_layer"])
+    else:
+        context_layer = seq2seq_encoders.PassThroughEncoder(embedder.get_output_dim())
+    del model_dict["context_layer"]
+
     # Create iterator and model.
     iterator = PyTorchDataLoader(batch_size=1, dataset=data)
     if args.model_archive is None:
         model = dygie.DyGIE(vocab=vocab,
                             embedder=embedder,
+                            context_layer=context_layer,
                             **model_dict)
     else:
         model = dygie.DyGIE.from_archive(args.model_archive)
@@ -86,7 +99,6 @@ def main():
     for batch in iterator:
         output_dict = model(**batch)
         print(output_dict)
-
 
 if __name__ == "__main__":
     main()

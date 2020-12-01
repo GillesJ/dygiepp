@@ -404,7 +404,6 @@ class Span:
 
     @property
     def text(self):
-        print(self.end_sent)
         return self.sentence.text[self.start_sent:self.end_sent + 1]
 
     def __repr__(self):
