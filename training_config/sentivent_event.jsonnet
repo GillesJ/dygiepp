@@ -82,7 +82,7 @@ local params = {
   events_context_window: 0,
   shared_attention_context: false,
   trigger_attention_context: false,
-  event_n_span_prop: 4,
+  event_n_span_prop: 0,
 
   // Model training
   batch_size: 15,
