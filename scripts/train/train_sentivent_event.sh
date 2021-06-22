@@ -1,8 +1,8 @@
-# Train ACE event extraction model.
-# Usage: bash scripts/train/train_ace05_event.sh [gpu-id]
+# Train SENTiVENT event extraction model.
+# Usage: bash scripts/train/train_sentivent_event.sh [gpu-id]
 # gpu-id can be an integer GPU ID, or -1 for CPU.
 
-experiment_name="sentivent-event_args_use_ner_labels:false-event_n_span_prop:4"
+experiment_name="sentivent-event-nonerforargs"
 data_root="./data/sentivent/ner_with_subtype_args"
 config_file="./training_config/sentivent_event.jsonnet"
 cuda_device=$1

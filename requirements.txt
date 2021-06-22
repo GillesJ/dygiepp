@@ -1,13 +1,8 @@
 # Usage: `pip install -r requirements.txt``
 
-# Modeling
-
 allennlp==0.9.0
-
-
-# Data munging
-
 pandas==0.25.2
 beautifulsoup4==4.8.1
-lxml
-python-Levenshtein
+lxml==4.6.3
+python-Levenshtein==0.12.2
+overrides==3.1.0
