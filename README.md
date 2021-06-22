@@ -25,7 +25,7 @@ conda activate dygiepp
 
 ```
 
-Start training: `rm -rf ./models/my-sentivent-event-nonerforargs; bash ./scripts/train/train_sentivent_event.sh 0`
+Start training: `rm -rf ./models/sentivent-event-nonerforargs; bash ./scripts/train/train_sentivent_event.sh 0`
 
 - To predict a trained model: `allennlp predict models/sentivent-event-nonerforargs/model.tar.gz data/sentivent/ner_with_subtype_args/test.jsonl --predictor dygie --include-package dygie --use-dataset-reader --output-file ./predictions/sentivent-test.jsonl --cuda-device 0`
 
